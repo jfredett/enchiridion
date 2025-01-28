@@ -1,0 +1,27 @@
+# permissions for end users to edit stockfish.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: stockfish-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: stockfish-editor-role
+rules:
+- apiGroups:
+  - job-runner.emerald.city
+  resources:
+  - stockfish
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - job-runner.emerald.city
+  resources:
+  - stockfish/status
+  verbs:
+  - get

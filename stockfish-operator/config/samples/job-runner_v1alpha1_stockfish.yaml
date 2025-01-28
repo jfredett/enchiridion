@@ -1,0 +1,9 @@
+apiVersion: job-runner.emerald.city/v1alpha1
+kind: Stockfish
+metadata:
+  labels:
+    app.kubernetes.io/name: stockfish-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: stockfish-sample
+spec:
+  # TODO(user): Add fields here

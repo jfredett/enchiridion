@@ -1,0 +1,23 @@
+# permissions for end users to view stockfish.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: stockfish-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: stockfish-viewer-role
+rules:
+- apiGroups:
+  - job-runner.emerald.city
+  resources:
+  - stockfish
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - job-runner.emerald.city
+  resources:
+  - stockfish/status
+  verbs:
+  - get

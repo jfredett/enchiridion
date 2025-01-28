@@ -1,0 +1,4 @@
+## Append samples of your project ##
+resources:
+- job-runner_v1alpha1_stockfish.yaml
+# +kubebuilder:scaffold:manifestskustomizesamples
