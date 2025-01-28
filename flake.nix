@@ -30,6 +30,10 @@
                 just
                 linuxKernel.packages.linux_6_6.perf
                 perf-tools
+
+                kubectl
+                k9s
+                kubectx
               ];
             }];
           };
