@@ -40,13 +40,14 @@ spec:
             description: StockfishSpec defines the desired state of Stockfish
             properties:
               depth:
-                description: Depth to search to
+                description: a depth to search from the given position
                 type: integer
               lines:
-                description: Number of the top lines to report
+                description: how many lines to output from the search along with their
+                  evaluation
                 type: integer
               position:
-                description: a UCI `position` command.
+                description: a valid `UCI` position command
                 type: string
             type: object
           status:

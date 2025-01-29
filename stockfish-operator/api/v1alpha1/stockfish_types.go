@@ -28,8 +28,12 @@ type StockfishSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Foo is an example field of Stockfish. Edit stockfish_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// a valid `UCI` position command
+	Position string `json:"position,omitempty"`
+	// a depth to search from the given position
+	Depth int `json:"depth,omitempty"`
+	// how many lines to output from the search along with their evaluation
+	Lines int `json:"lines,omitempty"`
 }
 
 // StockfishStatus defines the observed state of Stockfish

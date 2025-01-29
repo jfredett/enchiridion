@@ -1,6 +1,8 @@
 module github.com/jfredett/enchridion
 
-go 1.22
+go 1.22.0
+
+toolchain go1.23.4
 
 require (
 	github.com/onsi/ginkgo/v2 v2.19.0
