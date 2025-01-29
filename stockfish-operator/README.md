@@ -1,8 +1,6 @@
 # stockfish-operator
-// TODO(user): Add simple overview of use/purpose
 
-## Description
-// TODO(user): An in-depth paragraph about your project and overview of use
+Given a `position`, `depth`, and number of `lines` to search, return the top-`$lines` moves and their evaluations.
 
 ## Getting Started
 

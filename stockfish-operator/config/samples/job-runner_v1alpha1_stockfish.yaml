@@ -1,3 +1,5 @@
+# TODO: job-runner is wrong here, I should name it stockfish/stockfish or something. I guess this would ostensibly
+# contain multiple CRDs? I'm not sure what the best practice is here.
 apiVersion: job-runner.emerald.city/v1alpha1
 kind: Stockfish
 metadata:
@@ -6,4 +8,6 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: stockfish-sample
 spec:
-  # TODO(user): Add fields here
+  position: "position startpos moves d2d4 d7d5 Bc4 Nc6 e4 e6 Nf3 Bb4+ Nc3 Nf6 O-O Bxc3 bxc3 Nxe4"
+  depth: 50
+  lines: 5

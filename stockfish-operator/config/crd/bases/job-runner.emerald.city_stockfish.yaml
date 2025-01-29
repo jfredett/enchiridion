@@ -1,0 +1,59 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.16.1
+  name: stockfish.job-runner.emerald.city
+spec:
+  group: job-runner.emerald.city
+  names:
+    kind: Stockfish
+    listKind: StockfishList
+    plural: stockfish
+    singular: stockfish
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Stockfish is the Schema for the stockfish API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: StockfishSpec defines the desired state of Stockfish
+            properties:
+              depth:
+                description: Depth to search to
+                type: integer
+              lines:
+                description: Number of the top lines to report
+                type: integer
+              position:
+                description: a UCI `position` command.
+                type: string
+            type: object
+          status:
+            description: StockfishStatus defines the observed state of Stockfish
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
