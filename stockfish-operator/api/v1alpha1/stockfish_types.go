@@ -17,14 +17,11 @@ type StockfishSpec struct {
 	Depth int `json:"depth,omitempty"`
 	// how many lines to output from the search along with their evaluation
 	Lines int `json:"lines,omitempty"`
-
-	// The current state of the Stockfish pod, default is empty.
-	State string `json:"state,omitempty"`
 }
 
 // StockfishStatus defines the observed state of Stockfish
 type StockfishStatus struct {
-	Result string `json:"result,omitempty"`
+	State string `json:"state,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -45,7 +42,7 @@ type Stockfish struct {
 type StockfishList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []Stockfish `json:"items"`
+	Items []Stockfish `json:"items"`
 }
 
 func init() {

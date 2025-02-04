@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	uuid "github.com/google/uuid"
+
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -22,10 +23,17 @@ type StockfishReconciler struct {
 	Scheme *runtime.Scheme
 }
 
+func create(x int32) *int32 {
+	return &x
+}
+
 func newStockfishPod(cr *sf.Stockfish) *batchv1.Job {
-	// This should spawn of my stockfish pods w/ the script in an environment var
-	uuid := uuid.New().String()
-	jobName := fmt.Sprintf("stockfish-analysis-%s", uuid)
+
+	// TODO: Bundle the UUID into a jobname method and it should also set the UUID on the CRD? Or maybe just do everything by
+	// name?
+	jobName := fmt.Sprintf("stockfish-analysis-%s", uuid.New().String())
+
+	// TODO: This array should be a metod on Stockfish
 	args := []string{
 		"isready",
 		fmt.Sprintf("position %s", cr.Spec.Position),
@@ -34,14 +42,21 @@ func newStockfishPod(cr *sf.Stockfish) *batchv1.Job {
 		fmt.Sprintf("go depth %d", cr.Spec.Depth),
 	}
 
+	// TODO: I think this needs a finalizer to tell the controller when it's done so we can go grab it's output. Current
+	// state has the operator never picking the thing back up
+
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      jobName,
-			Namespace: cr.Namespace,
+			Name:       jobName,
+			Namespace:  cr.Namespace,
+			Finalizers: []string{},
 		},
 		Spec: batchv1.JobSpec{
+			// Ensures only one analysis at a time. Ideally this is externally configurable?
+			Parallelism: create(1),
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
+					RestartPolicy: corev1.RestartPolicyNever,
 					Containers: []corev1.Container{
 						{
 							Name:  jobName,
@@ -66,7 +81,10 @@ func newStockfishPod(cr *sf.Stockfish) *batchv1.Job {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.0/pkg/reconcile
 func (r *StockfishReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	// Grab a handle to the logger
 	log := logf.FromContext(ctx)
+
+	log.Info(fmt.Sprintf("Stockfish ||| Reconciling Stockfish : Req: %s", req))
 
 	// Fetch the Stockfish resource
 	var stockfish sf.Stockfish
@@ -75,26 +93,36 @@ func (r *StockfishReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	log.Info(fmt.Sprintf("Stockfish: %s", stockfish.Name))
-	log.Info(fmt.Sprintf("Stockfish position command: %s", stockfish.Spec.Position))
-	log.Info(fmt.Sprintf("Stockfish multipv option: setoption name MultiPV value %d", stockfish.Spec.Lines))
-	log.Info(fmt.Sprintf("Stockfish go command: go depth %d", stockfish.Spec.Depth))
+	// Based on the current state of the Stockfish resource, take the appropriate action
+	switch stockfish.Status.State {
 
-	switch stockfish.Spec.State {
-	case "":
+	case "": // The CRD is brand new and we don't have any pod running to analyze it, so start it up
+		log.Info("Stockfish ||| Analysis is not running, starting")
 		pod := newStockfishPod(&stockfish)
-		if err := r.Create(ctx, pod); err != nil {
-			log.Error(err, "unable to create Stockfish pod")
-			return ctrl.Result{}, err
-		}
 
-		stockfish.Spec.State = "Running"
+		//ctrl.SetControllerReference(&stockfish, pod, r.Scheme)
+
+		// Update the state to 'Running'
+		log.Info(fmt.Sprintf("Stockfish ||| Before: %+v", &stockfish))
+		stockfish.Status.State = "Running"
 		err := r.Status().Update(ctx, &stockfish)
 		if err != nil {
 			log.Error(err, "unable to update Stockfish status")
 			return ctrl.Result{}, err
 		}
+		log.Info(fmt.Sprintf("Stockfish ||| After: %+v", &stockfish))
+		log.Info("Stockfish ||| Updated Stockfish status to Running")
+
+		// TODO: Configure finalizer
+		pod.Finalizers = []string{"finalizers.emerald.city/stockfish-analysis"}
+
+		if err := r.Create(ctx, pod); err != nil {
+			log.Error(err, "unable to create Stockfish pod")
+			return ctrl.Result{}, err
+		}
+
 	case "Running":
+		log.Info("Stockfish ||| Analysis is running, checking for complete")
 		// Monitor the status of the pod
 		job := &batchv1.Job{}
 		if err := r.Get(ctx, req.NamespacedName, job); err != nil {
@@ -104,7 +132,7 @@ func (r *StockfishReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 		for _, condition := range job.Status.Conditions {
 			if condition.Type == batchv1.JobComplete {
-				stockfish.Spec.State = "Completed"
+				stockfish.Status.State = "Running"
 				err := r.Status().Update(ctx, &stockfish)
 				if err != nil {
 					log.Error(err, "unable to update to completed status")
@@ -114,11 +142,14 @@ func (r *StockfishReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 
 	case "Completed":
+		log.Info("Stockfish ||| Analysis is completed, parsing logs")
 		// Get the logs from the pod, parse them, and update the CRD, set status to CleanUp if this is successful,
 		// failed otherwise
 	case "Failed":
+		log.Info("Stockfish ||| Analysis failed, cleaning up")
 		// Copy the whole log to the CRD, set status to CleanUp
 	case "CleanUp":
+		log.Info("Stockfish ||| Analysis is complete, cleaning up")
 		// Delete the pod, set status to Done
 	}
 
@@ -129,5 +160,6 @@ func (r *StockfishReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 func (r *StockfishReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&sf.Stockfish{}).
+		Owns(&batchv1.Job{}).
 		Complete(r)
 }
