@@ -35,6 +35,7 @@
                 kubectl
                 k9s
                 kubectx
+                skopeo
 
                 stockfish
               ];

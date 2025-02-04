@@ -9,5 +9,5 @@ metadata:
   name: stockfish-sample
 spec:
   position: "position startpos moves d2d4 d7d5 Bc4 Nc6 e4 e6 Nf3 Bb4+ Nc3 Nf6 O-O Bxc3 bxc3 Nxe4"
-  depth: 50
+  depth: 51
   lines: 5

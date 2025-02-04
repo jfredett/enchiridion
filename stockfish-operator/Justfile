@@ -3,6 +3,17 @@ stockfish:
     make
     sudo make docker-build docker-push IMG='docker-registry.emerald.city/stockfish-operator:latest'
     make deploy IMG='docker-registry.emerald.city/stockfish-operator:latest'
+    make deploy IMG='docker-registry.emerald.city/stockfish-operator:latest'
 
 show-registry-contents:
     curl -X GET https://docker-registry.emerald.city/v2/_catalog
+
+stockfish-analyzer:
+    sudo docker build images/stockfish-analyzer -t docker-registry.emerald.city/stockfish-analyzer:latest
+    sudo docker push docker-registry.emerald.city/stockfish-analyzer:latest
+
+update-crd-sample:
+    kubectl apply -f config/samples/job-runner_v1alpha1_stockfish.yaml
+
+check-operator-image-hash:
+    skopeo inspect docker://docker-registry.emerald.city/stockfish-operator:latest | jq -r '.Digest'

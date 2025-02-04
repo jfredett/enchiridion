@@ -4,11 +4,14 @@ import (
 	"context"
 	"fmt"
 
+	uuid "github.com/google/uuid"
+	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	batchv1 "k8s.io/api/batch/v1"
 
 	sf "github.com/jfredett/enchridion/api/v1alpha1"
 )
@@ -19,17 +22,43 @@ type StockfishReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-
-func newStockfishPod(cr *Stockfish) *batchv1.Job {
+func newStockfishPod(cr *sf.Stockfish) *batchv1.Job {
 	// This should spawn of my stockfish pods w/ the script in an environment var
-	uuid := 
-	jobName := fmt.Sprintf("stockfish-analysis")
-	return
+	uuid := uuid.New().String()
+	jobName := fmt.Sprintf("stockfish-analysis-%s", uuid)
+	args := []string{
+		"isready",
+		fmt.Sprintf("position %s", cr.Spec.Position),
+		"setoption name Hash value 256",
+		fmt.Sprintf("setoption name MultiPV value %d", cr.Spec.Lines),
+		fmt.Sprintf("go depth %d", cr.Spec.Depth),
+	}
+
+	return &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      jobName,
+			Namespace: cr.Namespace,
+		},
+		Spec: batchv1.JobSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  jobName,
+							Image: "docker-registry.emerald.city/stockfish-analyzer:latest",
+							Args:  args,
+						},
+					},
+				},
+			},
+		},
+	}
 }
 
 // +kubebuilder:rbac:groups=job-runner.emerald.city,resources=stockfish,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=job-runner.emerald.city,resources=stockfish/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=job-runner.emerald.city,resources=stockfish/finalizers,verbs=update
+// +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -50,7 +79,6 @@ func (r *StockfishReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	log.Info(fmt.Sprintf("Stockfish position command: %s", stockfish.Spec.Position))
 	log.Info(fmt.Sprintf("Stockfish multipv option: setoption name MultiPV value %d", stockfish.Spec.Lines))
 	log.Info(fmt.Sprintf("Stockfish go command: go depth %d", stockfish.Spec.Depth))
-
 
 	switch stockfish.Spec.State {
 	case "":
@@ -94,9 +122,6 @@ func (r *StockfishReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		// Delete the pod, set status to Done
 	}
 
-
-
-	
 	return ctrl.Result{}, nil
 }
 
