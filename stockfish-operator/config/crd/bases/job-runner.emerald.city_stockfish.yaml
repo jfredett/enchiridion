@@ -49,9 +49,15 @@ spec:
               position:
                 description: a valid `UCI` position command
                 type: string
+              state:
+                description: The current state of the Stockfish pod, default is empty.
+                type: string
             type: object
           status:
             description: StockfishStatus defines the observed state of Stockfish
+            properties:
+              result:
+                type: string
             type: object
         type: object
     served: true

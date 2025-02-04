@@ -1,0 +1,8 @@
+
+stockfish:
+    make
+    sudo make docker-build docker-push IMG='docker-registry.emerald.city/stockfish-operator:latest'
+    make deploy IMG='docker-registry.emerald.city/stockfish-operator:latest'
+
+show-registry-contents:
+    curl -X GET https://docker-registry.emerald.city/v2/_catalog

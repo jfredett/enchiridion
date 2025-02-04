@@ -35,6 +35,8 @@
                 kubectl
                 k9s
                 kubectx
+
+                stockfish
               ];
             }];
           };
