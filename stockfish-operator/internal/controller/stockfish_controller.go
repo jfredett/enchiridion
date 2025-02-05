@@ -4,12 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	uuid "github.com/google/uuid"
-
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -31,7 +30,8 @@ func newStockfishPod(cr *sf.Stockfish) *batchv1.Job {
 
 	// TODO: Bundle the UUID into a jobname method and it should also set the UUID on the CRD? Or maybe just do everything by
 	// name?
-	jobName := fmt.Sprintf("stockfish-analysis-%s", uuid.New().String())
+	// jobName := fmt.Sprintf("stockfish-analysis-%s", uuid.New().String())
+	jobName := "stockfish-analysis"
 
 	// TODO: This array should be a metod on Stockfish
 	args := []string{
@@ -45,6 +45,14 @@ func newStockfishPod(cr *sf.Stockfish) *batchv1.Job {
 	// TODO: I think this needs a finalizer to tell the controller when it's done so we can go grab it's output. Current
 	// state has the operator never picking the thing back up
 
+	// TODO: Name should be something like `analysis-<name of CRD>"? I thought UID but that seems less convenient.
+
+	// TODO: This needs to mount some storage to write the logs to, and then read them back out on the operator side
+	// (they will mount the same storage). This is the only way to get the logs out of the pod.
+	// -- Alternative
+	// I could run (as part of the operator) a pod that recieves the reports from the analysis pod and then writes them
+	// to the CRD. That would mean having an internal `http` service in the pod, but that's not too bad. The Pod could
+	// then just `POST` whatever response to that hardcoded service (or maybe provided as an arg?)
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       jobName,
@@ -81,6 +89,8 @@ func newStockfishPod(cr *sf.Stockfish) *batchv1.Job {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.0/pkg/reconcile
 func (r *StockfishReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	// TODO: Handle Delete events better?
+
 	// Grab a handle to the logger
 	log := logf.FromContext(ctx)
 
@@ -96,61 +106,110 @@ func (r *StockfishReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// Based on the current state of the Stockfish resource, take the appropriate action
 	switch stockfish.Status.State {
 
+	// TODO: break out into methods
 	case "": // The CRD is brand new and we don't have any pod running to analyze it, so start it up
 		log.Info("Stockfish ||| Analysis is not running, starting")
 		pod := newStockfishPod(&stockfish)
 
-		//ctrl.SetControllerReference(&stockfish, pod, r.Scheme)
-
-		// Update the state to 'Running'
-		log.Info(fmt.Sprintf("Stockfish ||| Before: %+v", &stockfish))
+		// Update the status, and note the job name (this may not be necessary? FIXME)
 		stockfish.Status.State = "Running"
+		stockfish.Status.JobName = pod.ObjectMeta.Name
+
 		err := r.Status().Update(ctx, &stockfish)
 		if err != nil {
 			log.Error(err, "unable to update Stockfish status")
 			return ctrl.Result{}, err
 		}
-		log.Info(fmt.Sprintf("Stockfish ||| After: %+v", &stockfish))
-		log.Info("Stockfish ||| Updated Stockfish status to Running")
 
-		// TODO: Configure finalizer
-		pod.Finalizers = []string{"finalizers.emerald.city/stockfish-analysis"}
+		// TODO: Configure finalizer? I don't want the job to be cleaned until I get to it
+		// pod.Finalizers = []string{"finalizers.emerald.city/stockfish-analysis"}
 
+		log.Info("Stockfish ||| Starting Analysis Job ...")
 		if err := r.Create(ctx, pod); err != nil {
 			log.Error(err, "unable to create Stockfish pod")
 			return ctrl.Result{}, err
 		}
+		log.Info("Stockfish ||| ... Started")
 
 	case "Running":
 		log.Info("Stockfish ||| Analysis is running, checking for complete")
-		// Monitor the status of the pod
-		job := &batchv1.Job{}
-		if err := r.Get(ctx, req.NamespacedName, job); err != nil {
-			log.Error(err, "unable to fetch Job")
-			return ctrl.Result{}, client.IgnoreNotFound(err)
-		}
 
-		for _, condition := range job.Status.Conditions {
-			if condition.Type == batchv1.JobComplete {
-				stockfish.Status.State = "Running"
-				err := r.Status().Update(ctx, &stockfish)
-				if err != nil {
-					log.Error(err, "unable to update to completed status")
-					return ctrl.Result{}, err
+		// TODO: Maybe move this to above the switch, and set a flag if it's not there?
+		job := &batchv1.Job{}
+		jobName := types.NamespacedName{
+			Namespace: stockfish.Namespace,
+			Name:      stockfish.Status.JobName,
+		}
+		if err := r.Get(ctx, jobName, job); err != nil {
+			log.Error(err, "unable to fetch Job")
+			return ctrl.Result{Requeue: true}, client.IgnoreNotFound(err)
+		}
+		log.Info(fmt.Sprintf("Stockfish ||| Retrieved Job: %+v", job))
+
+		log.Info("Stockfish ||| Checking Job Conditions")
+		// if we have conditions, check them
+		if job.Status.Conditions != nil {
+			for _, condition := range job.Status.Conditions {
+				log.Info(fmt.Sprintf("Stockfish |||||| Condition: %+v", condition))
+				log.Info(fmt.Sprintf("Stockfish |||||| Condition.Type: %+v", condition.Type))
+				if condition.Type == batchv1.JobComplete {
+					log.Info("Stockfish ||| Analysis is complete, marking")
+					stockfish.Status.State = "Completed"
+
+					err := r.Status().Update(ctx, &stockfish)
+					if err != nil {
+						log.Error(err, "unable to update to completed status")
+						return ctrl.Result{}, err
+					}
 				}
 			}
+		} else { // requeue
+			return ctrl.Result{Requeue: true}, nil
 		}
 
 	case "Completed":
 		log.Info("Stockfish ||| Analysis is completed, parsing logs")
-		// Get the logs from the pod, parse them, and update the CRD, set status to CleanUp if this is successful,
-		// failed otherwise
-	case "Failed":
-		log.Info("Stockfish ||| Analysis failed, cleaning up")
-		// Copy the whole log to the CRD, set status to CleanUp
+
+		// Update the CRD w/ the results of the analysis from the pod.
+		//// grab the pod
+		job := &batchv1.Job{}
+		jobName := types.NamespacedName{
+			Namespace: stockfish.Namespace,
+			Name:      stockfish.Status.JobName,
+		}
+		if err := r.Get(ctx, jobName, job); err != nil {
+			log.Error(err, "unable to fetch Pod")
+			return ctrl.Result{Requeue: true}, client.IgnoreNotFound(err)
+		}
+		//// Grab the Logs from whereever I stashed them, filed by some UID
+		
+		//// attach the output to the CRD
+		stockfish.Status.State = "CleanUp"
+		stockfish.Status.Analysis = "TODO!"
+		if err := r.Status().Update(ctx, &stockfish); err != nil {
+			log.Error(err, "unable to update Stockfish")
+			return ctrl.Result{}, err
+		}
+		
 	case "CleanUp":
-		log.Info("Stockfish ||| Analysis is complete, cleaning up")
-		// Delete the pod, set status to Done
+		log.Info("Stockfish ||| Cleaning up")
+
+		log.Info("Stockfish ||| Getting Job for Cleanup")
+		job := &batchv1.Job{}
+		jobName := types.NamespacedName{
+			Namespace: stockfish.Namespace,
+			Name:      stockfish.Status.JobName,
+		}
+		if err := r.Get(ctx, jobName, job); err != nil {
+			log.Error(err, "unable to fetch Pod")
+			return ctrl.Result{}, client.IgnoreNotFound(err)
+		}
+
+		log.Info("Stockfish ||| Deleting Job")
+		if err := r.Delete(ctx, job); err != nil {
+			log.Error(err, "unable to delete Job")
+			return ctrl.Result{Requeue: true}, err
+		}
 	}
 
 	return ctrl.Result{}, nil

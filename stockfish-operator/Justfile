@@ -17,3 +17,7 @@ update-crd-sample:
 
 check-operator-image-hash:
     skopeo inspect docker://docker-registry.emerald.city/stockfish-operator:latest | jq -r '.Digest'
+
+cleanup:
+    kubectl delete job stockfish-analysis
+    kubectl delete stockfish stockfish-sample

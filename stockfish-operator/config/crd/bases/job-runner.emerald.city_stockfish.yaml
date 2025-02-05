@@ -53,7 +53,14 @@ spec:
           status:
             description: StockfishStatus defines the observed state of Stockfish
             properties:
+              analysis:
+                description: The analysis output from the Stockfish Job
+                type: string
+              jobName:
+                description: The name of the Job that is running the analysis
+                type: string
               state:
+                description: The current state of the Stockfish Analysis Job
                 type: string
             type: object
         type: object
