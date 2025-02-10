@@ -2,6 +2,17 @@
 
 Given a `position`, `depth`, and number of `lines` to search, return the top-`$lines` moves and their evaluations.
 
+## Overview
+
+Create a Stockfish CRD w/ the above.
+
+This runs the analysis as a K8s job.
+
+The raw log is stored in redis (via configmap), and the results are stored in the CRD via a UUID.
+
+When the job is completed, the operator spawns another job to post-process the results, and when that's complete it
+finalizes the CRD with the results.
+
 ## Getting Started
 
 ### Prerequisites

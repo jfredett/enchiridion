@@ -54,7 +54,7 @@ spec:
             description: StockfishStatus defines the observed state of Stockfish
             properties:
               analysis:
-                description: The analysis output from the Stockfish Job
+                description: The UUID of the analysis output from the Stockfish Job
                 type: string
               jobName:
                 description: The name of the Job that is running the analysis

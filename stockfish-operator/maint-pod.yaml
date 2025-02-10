@@ -1,0 +1,13 @@
+---
+# A maintenance pod with the redis client, etc
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: maint
+  namespace: lab
+spec:
+  containers:
+  - name: maint
+    image: "docker-registry.emerald.city/maint:v0.0.2"
+

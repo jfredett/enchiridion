@@ -1,6 +1,7 @@
 package v1alpha1
 
 import (
+	// uuid "github.com/google/uuid"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -25,7 +26,7 @@ type StockfishStatus struct {
 	State string `json:"state,omitempty"`
 	// The name of the Job that is running the analysis
 	JobName string `json:"jobName,omitempty"`
-	// The analysis output from the Stockfish Job
+	// The UUID of the analysis output from the Stockfish Job
 	Analysis string `json:"analysis,omitempty"`
 }
 

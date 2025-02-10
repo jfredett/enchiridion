@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	uuid "github.com/google/uuid"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -28,34 +29,26 @@ func create(x int32) *int32 {
 
 func newStockfishPod(cr *sf.Stockfish) *batchv1.Job {
 
-	// TODO: Bundle the UUID into a jobname method and it should also set the UUID on the CRD? Or maybe just do everything by
-	// name?
-	// jobName := fmt.Sprintf("stockfish-analysis-%s", uuid.New().String())
-	jobName := "stockfish-analysis"
-
-	// TODO: This array should be a metod on Stockfish
+	// TODO: This array should be a method on Stockfish
 	args := []string{
 		"isready",
-		fmt.Sprintf("position %s", cr.Spec.Position),
 		"setoption name Hash value 256",
 		fmt.Sprintf("setoption name MultiPV value %d", cr.Spec.Lines),
+		"uci",
+		fmt.Sprintf("position %s", cr.Spec.Position),
 		fmt.Sprintf("go depth %d", cr.Spec.Depth),
 	}
+
+	// TODO: Method on stockfish
 
 	// TODO: I think this needs a finalizer to tell the controller when it's done so we can go grab it's output. Current
 	// state has the operator never picking the thing back up
 
 	// TODO: Name should be something like `analysis-<name of CRD>"? I thought UID but that seems less convenient.
 
-	// TODO: This needs to mount some storage to write the logs to, and then read them back out on the operator side
-	// (they will mount the same storage). This is the only way to get the logs out of the pod.
-	// -- Alternative
-	// I could run (as part of the operator) a pod that recieves the reports from the analysis pod and then writes them
-	// to the CRD. That would mean having an internal `http` service in the pod, but that's not too bad. The Pod could
-	// then just `POST` whatever response to that hardcoded service (or maybe provided as an arg?)
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:       jobName,
+			Name:       cr.Status.JobName,
 			Namespace:  cr.Namespace,
 			Finalizers: []string{},
 		},
@@ -67,9 +60,21 @@ func newStockfishPod(cr *sf.Stockfish) *batchv1.Job {
 					RestartPolicy: corev1.RestartPolicyNever,
 					Containers: []corev1.Container{
 						{
-							Name:  jobName,
-							Image: "docker-registry.emerald.city/stockfish-analyzer:latest",
-							Args:  args,
+							Name:            cr.Status.JobName,
+							Image:           "docker-registry.emerald.city/stockfish-analyzer:latest",
+							ImagePullPolicy: corev1.PullAlways,
+							Args:            args,
+							Env: []corev1.EnvVar{
+								{
+									// TODO: would be ideal to pull this from the Endpoint API dynamically
+									Name:  "REDIS_URL",
+									Value: "redis-master",
+								},
+								{
+									Name:  "UUID",
+									Value: cr.Status.Analysis,
+								},
+							},
 						},
 					},
 				},
@@ -109,11 +114,14 @@ func (r *StockfishReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// TODO: break out into methods
 	case "": // The CRD is brand new and we don't have any pod running to analyze it, so start it up
 		log.Info("Stockfish ||| Analysis is not running, starting")
-		pod := newStockfishPod(&stockfish)
 
 		// Update the status, and note the job name (this may not be necessary? FIXME)
 		stockfish.Status.State = "Running"
-		stockfish.Status.JobName = pod.ObjectMeta.Name
+		uuid := fmt.Sprintf("%s", uuid.New().String())
+		stockfish.Status.Analysis = uuid
+		stockfish.Status.JobName = fmt.Sprintf("stockfish-analysis-%s", uuid)
+
+		pod := newStockfishPod(&stockfish)
 
 		err := r.Status().Update(ctx, &stockfish)
 		if err != nil {
@@ -182,7 +190,7 @@ func (r *StockfishReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			return ctrl.Result{Requeue: true}, client.IgnoreNotFound(err)
 		}
 		//// Grab the Logs from whereever I stashed them, filed by some UID
-		
+
 		//// attach the output to the CRD
 		stockfish.Status.State = "CleanUp"
 		stockfish.Status.Analysis = "TODO!"
@@ -190,7 +198,7 @@ func (r *StockfishReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			log.Error(err, "unable to update Stockfish")
 			return ctrl.Result{}, err
 		}
-		
+
 	case "CleanUp":
 		log.Info("Stockfish ||| Cleaning up")
 

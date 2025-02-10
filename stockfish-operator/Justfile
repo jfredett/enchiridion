@@ -8,6 +8,10 @@ stockfish:
 show-registry-contents:
     curl -X GET https://docker-registry.emerald.city/v2/_catalog
 
+maint:
+    sudo docker build images/maint -t docker-registry.emerald.city/maint:latest
+    sudo docker push docker-registry.emerald.city/maint:latest
+
 stockfish-analyzer:
     sudo docker build images/stockfish-analyzer -t docker-registry.emerald.city/stockfish-analyzer:latest
     sudo docker push docker-registry.emerald.city/stockfish-analyzer:latest
@@ -19,5 +23,16 @@ check-operator-image-hash:
     skopeo inspect docker://docker-registry.emerald.city/stockfish-operator:latest | jq -r '.Digest'
 
 cleanup:
-    kubectl delete job stockfish-analysis
-    kubectl delete stockfish stockfish-sample
+    #!/usr/bin/env bash
+    kubectl delete -f config/samples/job-runner_v1alpha1_stockfish.yaml
+
+
+everything: stockfish stockfish-analyzer cleanup
+    
+analyzer-test *ARGS:
+    #!/usr/bin/env bash
+
+    export REDIS_URL=redis
+    export UUID=1234
+
+    sudo docker run -it --rm --name analyzer-test docker-registry.emerald.city/stockfish-analyzer:latest {{ ARGS }}
